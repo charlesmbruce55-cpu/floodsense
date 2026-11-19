@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f6f5f1">
+<title>FloodSense · In-wall drying monitor</title>
+<style>
+:root{
+  color-scheme: light;
+  --plane:#f6f5f1; --surface:#fcfcfb; --surface-2:#f0efec;
+  --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
+  --grid:#e1e0d9; --axis:#c3c2b7; --ring:rgba(11,11,11,0.09);
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a;
+  --good:#0ca30c; --good-ink:#006300; --warn:#fab219; --warn-ink:#8a5a00; --crit:#d03b3b;
+  --water-1:#9ec5f4; --water-2:#6da7ec; --water-3:#2a78d6;
+  --brick:#c99a86; --brick-edge:#b0806b; --brick-dry:#e9d1c4;
+  --shadow:0 1px 2px rgba(0,0,0,.04),0 4px 16px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    color-scheme: dark;
+    --plane:#0d0d0d; --surface:#1a1a19; --surface-2:#232321;
+    --ink:#f0efec; --ink-2:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --axis:#383835; --ring:rgba(255,255,255,0.09);
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70;
+    --good-ink:#0ca30c; --warn-ink:#fab219;
+    --water-1:#184f95; --water-2:#256abf; --water-3:#5598e7;
+    --brick:#7a4e3f; --brick-edge:#7a5446; --brick-dry:#4d3a32;
+    --shadow:none;
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--plane);color:var(--ink);
+     font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+     -webkit-font-smoothing:antialiased}
+.page{max-width:1120px;margin:0 auto;padding:20px 20px 40px}
+button{font:inherit;font-size:13px;font-weight:500;padding:7px 12px;border-radius:999px;
+       border:1px solid var(--ring);background:var(--surface);color:var(--ink);cursor:pointer}
+button:hover{border-color:var(--axis)}
+button.primary{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+
+/* header */
+header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+.brand{display:flex;align-items:center;gap:10px}
+.brand svg{width:34px;height:34px;flex:none}
+.brand b{font-size:19px;letter-spacing:-.01em;display:block;line-height:1.1}
+.brand span{font-size:12.5px;color:var(--muted)}
+.spacer{flex:1}
+.pill{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;
+      padding:5px 11px;border-radius:999px;background:var(--surface);border:1px solid var(--ring);white-space:nowrap}
+.pill i{width:8px;height:8px;border-radius:50%;flex:none}
+.live i{animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+@media (prefers-reduced-motion: reduce){.live i{animation:none}}
+.sub{font-size:12.5px;color:var(--muted)}
+
+.banner{display:flex;gap:10px;align-items:center;font-size:13px;color:var(--ink-2);
+        background:var(--surface);border:1px dashed var(--axis);border-radius:12px;padding:10px 14px;margin-bottom:16px}
+.banner b{color:var(--ink)}
+
+/* cards */
+.card{background:var(--surface);border:1px solid var(--ring);border-radius:16px;padding:18px;box-shadow:var(--shadow)}
+.walls{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,470px),1fr));gap:16px;margin-bottom:16px}
+.wall-head{display:flex;align-items:flex-start;gap:10px;margin-bottom:14px}
+.wall-head h2{margin:0;font-size:16px;font-weight:600;letter-spacing:-.005em}
+.wall-head p{margin:1px 0 0;font-size:12.5px;color:var(--muted)}
+.wall-body{display:grid;grid-template-columns:150px 1fr;grid-template-areas:"xs top" "xs stats";gap:0 18px;align-items:start}
+.xs{grid-area:xs}.top{grid-area:top}.wall-body .stats{grid-area:stats}
+@media (max-width:560px){.wall-body{grid-template-columns:112px 1fr;grid-template-areas:"xs top" "stats stats";gap:0 14px}.hero .v{font-size:38px}.summary{font-size:13px}.wall-body .stats{margin-top:6px;padding-top:12px;border-top:1px solid var(--grid)}}
+.xs svg{width:100%;height:auto;display:block}
+.hero .k{font-size:12px;color:var(--muted)}
+.hero .v{font-size:44px;font-weight:650;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums}
+.hero .v small{font-size:20px;font-weight:600;letter-spacing:0;color:var(--ink-2)}
+.summary{font-size:13.5px;color:var(--ink-2);margin:8px 0 14px;line-height:1.45}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px}
+.stat .k{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.stat .v{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
+.stat .v small{font-weight:400;color:var(--ink-2);font-size:12.5px}
+.gauge{position:relative;height:6px;border-radius:3px;background:var(--surface-2);margin-top:6px;overflow:hidden}
+.gauge i{position:absolute;left:0;top:0;bottom:0;border-radius:3px}
+.gauge u{position:absolute;top:-2px;bottom:-2px;width:1px;background:var(--axis)}
+.mini{display:flex;align-items:center;gap:6px}
+.mini i{width:8px;height:8px;border-radius:50%;flex:none}
+
+/* charts */
+.charts{display:grid;grid-template-columns:1fr;gap:16px}
+.chart-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:4px}
+.chart-head h3{margin:0;font-size:15px;font-weight:600}
+.chart-head p{margin:0;font-size:12.5px;color:var(--muted)}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--ink-2);margin:8px 0 6px}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.legend i{width:14px;height:3px;border-radius:2px;flex:none}
+.legend i.dash{height:2px}
+.plot{position:relative}
+.plot svg{display:block;width:100%}
+.tip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--axis);
+     border-radius:10px;padding:8px 10px;font-size:12px;line-height:1.55;white-space:nowrap;
+     box-shadow:0 4px 18px rgba(0,0,0,.12);opacity:0;transition:opacity .1s;font-variant-numeric:tabular-nums;z-index:2}
+.tip b{font-weight:600}
+.tip .r{display:flex;align-items:center;gap:7px}
+.tip .r i{width:8px;height:8px;border-radius:50%;flex:none}
+.note{font-size:12.5px;color:var(--muted);margin:8px 0 0}
+
+/* table + settings + footer */
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0 10px}
+table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
+th,td{text-align:right;padding:7px 8px;border-bottom:1px solid var(--grid);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--muted);font-weight:500;font-size:12px}
+.scroll{overflow-x:auto}
+label{display:block;font-size:12.5px;color:var(--ink-2);margin:10px 0 4px}
+input{font:inherit;font-size:14px;width:100%;padding:8px 10px;border-radius:10px;
+      border:1px solid var(--ring);background:var(--plane);color:var(--ink)}
+.cfg{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0 14px}
+.hide{display:none!important}
+footer{margin-top:22px;font-size:12.5px;color:var(--muted);line-height:1.6}
+footer h4{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-2);margin:0 0 6px}
+footer ul{margin:0;padding-left:18px}
+.err{color:var(--crit);font-size:13px;margin:10px 0 0}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header>
+  <div class="brand">
+    <svg viewBox="0 0 34 34" aria-hidden="true">
+      <rect x="1" y="1" width="32" height="32" rx="9" fill="var(--ink)"/>
+      <rect x="7" y="9" width="20" height="5" rx="1.2" fill="var(--surface)" opacity=".9"/>
+      <rect x="7" y="16" width="9" height="5" rx="1.2" fill="var(--surface)" opacity=".9"/>
+      <rect x="18" y="16" width="9" height="5" rx="1.2" fill="var(--surface)" opacity=".9"/>
+      <rect x="7" y="23" width="20" height="2.6" rx="1.2" fill="var(--s1)"/>
+      <circle cx="12" cy="18.5" r="1.6" fill="var(--s1)"/>
+    </svg>
+    <div><b>FloodSense</b><span>In-wall drying monitor</span></div>
+  </div>
+  <div class="spacer"></div>
+  <span class="pill live" id="livePill"><i style="background:var(--muted)"></i><span>Connecting</span></span>
+  <span class="sub" id="updated"></span>
+  <button id="refreshBtn">Refresh</button>
+  <button id="cfgBtn">Settings</button>
+</header>
+
+<div class="banner hide" id="demoBanner">
+  <span><b>Demo data.</b> <span id="demoWhy">A simulated three-day dry-down.</span> Live readings replace it as soon as the rigs log.</span>
+</div>
+
+<div class="card hide" id="cfgCard" style="margin-bottom:16px">
+  <div class="chart-head"><h3>Settings</h3><p>Saved in this browser only</p></div>
+  <div class="cfg">
+    <div><label for="iUrl">Data source (Apps Script URL)</label><input id="iUrl"></div>
+    <div><label for="iAdry">Wall A · dry mass (g)</label><input id="iAdry" inputmode="decimal"></div>
+    <div><label for="iAext">Wall A · probes, wrap and spacers (g)</label><input id="iAext" inputmode="decimal"></div>
+    <div><label for="iBdry">Wall B · dry mass (g)</label><input id="iBdry" inputmode="decimal"></div>
+    <div><label for="iBext">Wall B · probes, wrap and spacers (g)</label><input id="iBext" inputmode="decimal"></div>
+    <div><label for="iSalt">Wall B · salt fraction of soak water</label><input id="iSalt" inputmode="decimal"></div>
+  </div>
+  <p class="note">"Water remaining" needs the dry mass and extras. Until they are set, the mass is shown instead.</p>
+  <div class="toolbar"><button class="primary" id="saveBtn">Save</button><button id="demoBtn">Show demo data</button></div>
+</div>
+
+<section class="walls" id="walls"></section>
+
+<section class="charts">
+  <div class="card">
+    <div class="chart-head"><h3 id="dryTitle">Water remaining in the wall</h3><p id="drySub">Measured by weighing, with a projection to dry</p></div>
+    <div class="legend" id="dryLegend"></div>
+    <div class="plot" id="dryPlot"><svg id="drySvg"></svg><div class="tip" id="dryTip"></div></div>
+  </div>
+  <div class="card">
+    <div class="chart-head"><h3>Humidity inside the wall</h3><p>The FloodSense signal: each probe reads near-saturated until the drying front reaches its depth</p></div>
+    <div class="legend" id="rhLegend"></div>
+    <div class="plot" id="rhPlot"><svg id="rhSvg"></svg><div class="tip" id="rhTip"></div></div>
+  </div>
+</section>
+
+<div class="toolbar">
+  <button id="tableBtn">Show readings table</button>
+</div>
+<div class="card hide" id="tableCard"><div class="scroll" id="tableBox"></div></div>
+<p class="err" id="errBox"></p>
+
+<footer>
+  <h4>How it works</h4>
+  <ul>
+    <li>Two humidity probes sit in sealed holes at 15 mm and at mid-depth. While the brick around a probe is wet, its air stays near saturation.</li>
+    <li>A probe's drying front has arrived when its humidity drops 3 points below its starting level and stays there for 2 hours.</li>
+    <li>Water remaining comes from weighing the wall section every 10 minutes. Time to dry projects the recent falling-rate trend down to 5% water.</li>
+    <li>Mould risk uses the VTT mould-growth model (Hukka &amp; Viitanen, 1999) on the shallow probe's humidity and temperature. M = 1 means microscopic growth.</li>
+  </ul>
+</footer>
+</div>
+
+<script>
+// ---------------------------------------------------------------- config
+var DEF_URL = "https://script.google.com/macros/s/AKfycbz6fi5fn7qfa79y7qQsWV4mSdSBHYf8hRCssmJrwc1TD4Tr2Qju3XoMpOTWcyLdfpM4/exec";
+var DRY_TARGET = 0.05;
+function $(i){ return document.getElementById(i); }
+var C = {}, MODE = "live", LAST = null, CACHE = null;
+
+function loadCfg(){
+  try{ C = JSON.parse(localStorage.getItem("floodsense") || "{}") || {}; }catch(e){ C = {}; }
+  if(!C.url) C.url = DEF_URL;
+  if(C.salt == null || C.salt === "") C.salt = "0.0338";
+  $("iUrl").value = C.url; $("iAdry").value = C.adry || ""; $("iAext").value = C.aext || "";
+  $("iBdry").value = C.bdry || ""; $("iBext").value = C.bext || ""; $("iSalt").value = C.salt;
+}
+function saveCfg(){
+  C = { url:$("iUrl").value.trim() || DEF_URL, adry:$("iAdry").value, aext:$("iAext").value,
+        bdry:$("iBdry").value, bext:$("iBext").value, salt:$("iSalt").value };
+  try{ localStorage.setItem("floodsense", JSON.stringify(C)); }catch(e){}
+  $("cfgCard").classList.add("hide");
+  MODE = "live"; refresh();
+}
+function num(v){ var x = parseFloat(v); return isFinite(x) ? x : null; }
+
+// --------------------------------------------------------------- analysis
+function median(a){
+  var b = a.filter(function(x){ return typeof x === "number" && isFinite(x); }).sort(function(p,q){ return p-q; });
+  if(!b.length) return null;
+  var m = Math.floor(b.length/2);
+  return b.length % 2 ? b[m] : (b[m-1]+b[m])/2;
+}
+function frontArrival(h, rh){
+  var early = [];
+  for(var i=0;i<h.length;i++) if(h[i]>=1 && h[i]<=6 && rh[i]!=null) early.push(rh[i]);
+  var plateau = median(early);
+  if(plateau === null) return null;
+  var th = plateau - 3;
+  for(var a=0;a<h.length;a++){
+    if(!(rh[a]!=null && rh[a]<th)) continue;
+    if(h[h.length-1] < h[a]+2) return null;
+    var ok = true;
+    for(var b=a;b<h.length && h[b]<=h[a]+2;b++){ if(!(rh[b]!=null && rh[b]<th)){ ok=false; break; } }
+    if(ok) return h[a];
+  }
+  return null;
+}
+// VTT mould index (Hukka & Viitanen 1999), hourly form, most sensitive wood class.
+function vtt(h, T, RH){
+  var M = 0, unfav = 0, out = [];
+  for(var i=0;i<h.length;i++){
+    var dt = i ? h[i]-h[i-1] : 0, t = T[i], r = RH[i];
+    if(t==null || r==null || dt<=0){ out.push(M); continue; }
+    r = Math.min(Math.max(r,1),100);
+    var crit = t<=20 ? -0.00267*t*t*t + 0.160*t*t - 3.13*t + 100 : 80;
+    if(t>0 && t<50 && r>=crit){
+      unfav = 0;
+      var tm = Math.exp(-0.68*Math.log(t) - 13.9*Math.log(r) + 66.02);
+      var tv = Math.exp(-0.74*Math.log(t) - 12.72*Math.log(r) + 61.50);
+      var k1 = M<1 ? 1 : 2/(tv/tm - 1);
+      var q = (crit - r)/(crit - 100);
+      var mmax = 1 + 7*q - 2*q*q;
+      var k2 = Math.max(1 - Math.exp(2.3*(M - mmax)), 0);
+      M += k1*k2/(168*tm)*dt;
+    }else{
+      unfav += dt;
+      M += (unfav<=6 ? -0.00133 : unfav<=24 ? 0 : -0.000667)*dt;
+    }
+    M = Math.max(M,0); out.push(M);
+  }
+  return out;
+}
+function rowsOf(sheets, name){
+  var r = (sheets && sheets[name]) || [], out = [];
+  for(var i=0;i<r.length;i++){
+    var t = r[i].time; if(!(typeof t==="number" && t>1e12)) t = r[i].received;
+    if(!(typeof t==="number" && t>1e12)) continue;
+    out.push({ t:t, rhS:num(r[i].rh_shallow), rhD:num(r[i].rh_deep), T:num(r[i].t_shallow), mass:num(r[i].mass_g) });
+  }
+  return out.sort(function(p,q){ return p.t-q.t; });
+}
+
+function analyse(sheets, id, dry, ext, saltFrac, now){
+  var r = rowsOf(sheets, "Rig_"+id);
+  var A = { id:id, empty:!r.length };
+  if(A.empty) return A;
+  var t0 = r[0].t;
+  var H = function(t){ return (t - t0)/3600000; };
+  var h = r.map(function(x){ return H(x.t); });
+  var rhS = r.map(function(x){ return x.rhS; }), rhD = r.map(function(x){ return x.rhD; });
+  var T = r.map(function(x){ return x.T; });
+
+  // mass: own load cell, else hand weighings in Manual_<id>
+  var mh = [], mv = [];
+  r.forEach(function(x, i){ if(x.mass!=null){ mh.push(h[i]); mv.push(x.mass); } });
+  var source = "load cell";
+  if(!mv.length){
+    rowsOf(sheets, "Manual_"+id).forEach(function(x){ if(x.mass!=null){ mh.push(H(x.t)); mv.push(x.mass); } });
+    source = "hand weighing";
+  }
+  var start = null;
+  if(dry!=null){ for(var j=0;j<mv.length;j++) if(mv[j] > 0.9*dry){ start=j; break; } }
+  var mr = [];
+  if(dry!=null && ext!=null && start!=null){
+    var sol0 = mv[start] - dry - ext, salt = sol0*(saltFrac||0), W0 = sol0 - salt;
+    if(W0 > 0) for(var k=start;k<mv.length;k++) mr.push({ x:mh[k], y:(mv[k]-dry-ext-salt)/W0 });
+  }
+  var MR = mr.length ? mr[mr.length-1].y : null;
+
+  // projection: falling-rate exponential fitted to the last 24 h
+  var eta = null, proj = [];
+  if(mr.length >= 3 && MR!=null){
+    var xEnd = mr[mr.length-1].x;
+    var fit = mr.filter(function(p){ return p.x >= xEnd-24 && p.y > DRY_TARGET && p.y < 0.9; });
+    if(fit.length >= 3){
+      var n = fit.length, sx=0, sy=0, sxx=0, sxy=0;
+      fit.forEach(function(p){ var y=Math.log(p.y); sx+=p.x; sy+=y; sxx+=p.x*p.x; sxy+=p.x*y; });
+      var slope = (n*sxy - sx*sy)/(n*sxx - sx*sx);
+      if(isFinite(slope) && slope < -1e-4){
+        var kk = -slope;
+        eta = MR <= DRY_TARGET ? 0 : Math.log(MR/DRY_TARGET)/kk;
+        var cap = Math.min(eta, 24*14);
+        for(var s=0;s<=24;s++){ var dx = cap*s/24; proj.push({ x:xEnd+dx, y:MR*Math.exp(-kk*dx) }); }
+      }
+    }
+  }
+  var M = vtt(h, T, rhS);
+  var last = r[r.length-1];
+  var mins = (now - last.t)/60000;
+  A.rows = r.length; A.t0 = t0; A.hours = h[h.length-1]; A.minsAgo = mins;
+  A.state = mins <= 20 ? "logging" : mins <= 60 ? "late" : "offline";
+  A.rhS = last.rhS; A.rhD = last.rhD; A.T = last.T;
+  A.mass = mv.length ? mv[mv.length-1] : null; A.massSource = mv.length ? source : null;
+  A.MR = MR; A.mr = mr; A.proj = proj; A.eta = eta;
+  A.mass_series = mh.map(function(x,i){ return { x:x, y:mv[i] }; });
+  A.fS = frontArrival(h, rhS); A.fD = frontArrival(h, rhD);
+  A.hasDeep = rhD.some(function(x){ return x!=null; });
+  A.sS = h.map(function(x,i){ return { x:x, y:rhS[i] }; }).filter(function(p){ return p.y!=null; });
+  A.sD = h.map(function(x,i){ return { x:x, y:rhD[i] }; }).filter(function(p){ return p.y!=null; });
+  A.M = M.length ? M[M.length-1] : 0; A.Mmax = M.length ? Math.max.apply(null, M) : 0;
+  return A;
+}
+
+// ------------------------------------------------------------ formatting
+function f(v, d){ return v==null || !isFinite(v) ? "–" : Number(v).toFixed(d); }
+function ago(m){
+  if(m==null) return "–";
+  if(m < 1.5) return "just now";
+  if(m < 90) return Math.round(m) + " min ago";
+  if(m < 48*60) return Math.round(m/60) + " h ago";
+  return Math.round(m/1440) + " days ago";
+}
+function dur(h){
+  if(h==null) return "–";
+  if(h < 1) return "< 1 h";
+  if(h < 36) return Math.round(h) + " h";
+  return (h/24).toFixed(1) + " days";
+}
+function day(ms){
+  return new Date(ms).toLocaleDateString(undefined, { weekday:"short", day:"numeric", month:"short" });
+}
+function stateStyle(s){
+  return s==="logging" ? { c:"var(--good)", icon:"●", label:"Logging" }
+       : s==="late"    ? { c:"var(--warn)", icon:"▲", label:"Late" }
+       :                 { c:"var(--crit)", icon:"■", label:"Offline" };
+}
+function mouldBand(M){
+  return M < 0.5 ? { c:"var(--good)", label:"No growth" }
+       : M < 1   ? { c:"var(--warn)", label:"Risk building" }
+       : M < 3   ? { c:"var(--warn)", label:"Microscopic growth" }
+       :           { c:"var(--crit)", label:"Visible growth likely" };
+}
+
+// --------------------------------------------------------- cross-section
+// A section through the brick: drying faces top and bottom, wet core shrinking
+// toward the middle, probes at 15 mm and mid-depth lit by measured front arrival.
+function section(a, hasMid){
+  var bx = 2, bw = 66, top = 24, th = 176, mm = th/65;
+  var dried;            // dry layer from each face, mm (approximate)
+  if(a.MR != null) dried = Math.min(32.5, Math.max(0, (1 - a.MR) * 32.5));
+  else dried = a.fD!=null ? 32.5 : a.fS!=null ? 18 : 6;
+  if(a.fS!=null) dried = Math.max(dried, 16); else dried = Math.min(dried, 13);
+  if(a.fD!=null) dried = 32.5; else if(hasMid) dried = Math.min(dried, 30);
+  var dpx = dried*mm, wetTop = top + dpx, wetH = Math.max(0, th - 2*dpx);
+  function probe(depth, label, show, dry){
+    var y = top + depth*mm;
+    if(!show) return '<g><line x1="'+(bx+bw-14)+'" x2="'+(bx+bw+8)+'" y1="'+y+'" y2="'+y+'" stroke="var(--muted)" stroke-dasharray="2 3"/>'+
+      '<text x="'+(bx+bw+12)+'" y="'+(y+4)+'" font-size="10.5" fill="var(--muted)">no probe</text></g>';
+    var cx = bx + bw - 14;
+    return '<line x1="'+(cx+6)+'" x2="'+(bx+bw+8)+'" y1="'+y+'" y2="'+y+'" stroke="var(--ink-2)" stroke-width="1"/>'+
+      '<circle cx="'+cx+'" cy="'+y+'" r="5.5" fill="'+(dry?"var(--surface)":"var(--s1)")+'" stroke="var(--ink)" stroke-width="1.5"/>'+
+      '<text x="'+(bx+bw+12)+'" y="'+(y-1)+'" font-size="11" font-weight="600" fill="var(--ink)">'+label+'</text>'+
+      '<text x="'+(bx+bw+12)+'" y="'+(y+12)+'" font-size="10.5" fill="'+(dry?"var(--good-ink)":"var(--ink-2)")+'">'+(dry?"dry":"still wet")+'</text>';
+  }
+  var mid = bx + bw/2;
+  return '<svg viewBox="0 0 150 236" role="img" aria-label="Cross-section of wall '+a.id+': '+f(dried,0)+' mm dried from each face">'+
+    '<text x="'+mid+'" y="14" text-anchor="middle" font-size="10" fill="var(--muted)">drying face</text>'+
+    '<rect x="'+bx+'" y="'+top+'" width="'+bw+'" height="'+th+'" rx="5" fill="var(--brick-dry)"/>'+
+    (wetH>0 ? '<rect x="'+bx+'" y="'+wetTop+'" width="'+bw+'" height="'+wetH+'" fill="var(--water-1)"/>' : '')+
+    '<rect x="'+bx+'" y="'+top+'" width="'+bw+'" height="'+th+'" rx="5" fill="none" stroke="var(--brick-edge)" stroke-width="1"/>'+
+    probe(15, "15 mm", true, a.fS!=null)+
+    probe(32.5, "mid-depth", hasMid, a.fD!=null)+
+    '<text x="'+mid+'" y="'+(top+th+16)+'" text-anchor="middle" font-size="10" fill="var(--muted)">drying face</text>'+
+    '<rect x="'+bx+'" y="'+(top+th+24)+'" width="9" height="7" rx="1.5" fill="var(--water-1)" stroke="var(--brick-edge)" stroke-width=".6"/>'+
+    '<text x="'+(bx+13)+'" y="'+(top+th+31)+'" font-size="10" fill="var(--muted)">wet</text>'+
+    '<rect x="'+(bx+38)+'" y="'+(top+th+24)+'" width="9" height="7" rx="1.5" fill="var(--brick-dry)" stroke="var(--brick-edge)" stroke-width=".6"/>'+
+    '<text x="'+(bx+51)+'" y="'+(top+th+31)+'" font-size="10" fill="var(--muted)">dried</text>'+
+    '</svg>';
+}
+
+function summary(a){
+  if(a.empty) return "Waiting for the first readings from this rig.";
+  var s;
+  if(a.fD!=null) s = "The drying front has reached the core.";
+  else if(a.fS!=null) s = "The front has passed 15 mm; the core is still wet.";
+  else s = "The wall is still saturated; the front has not reached 15 mm yet.";
+  if(a.eta===0) s += " It has reached the 5% dry target.";
+  else if(a.eta!=null) s += " On the current trend it reaches 5% water in about "+dur(a.eta)+".";
+  return s;
+}
+
+function wallCard(a, title, flood){
+  if(a.empty) return '<article class="card"><div class="wall-head"><div><h2>'+title+'</h2><p>'+flood+'</p></div></div>'+
+    '<p class="summary">Waiting for the first readings from this rig.</p></article>';
+  var st = stateStyle(a.state), mb = mouldBand(a.M);
+  var hero = a.MR!=null
+    ? '<div class="k">Water remaining</div><div class="v">'+f(Math.max(0,a.MR*100),0)+'<small>%</small></div>'
+    : '<div class="k">Section mass ('+(a.massSource||"no weighing yet")+')</div><div class="v">'+(a.mass==null?"–":f(a.mass,0))+'<small> g</small></div>';
+  var etaTxt = a.eta===0 ? "Dry" : a.eta==null ? "–" : dur(a.eta);
+  var etaSub = a.eta ? '<small> · '+day(Date.now()+a.eta*3600000)+'</small>' : '';
+  var g = Math.min(a.M/6,1)*100;
+  return '<article class="card">'+
+    '<div class="wall-head"><div><h2>'+title+'</h2><p>'+flood+' · running '+dur(a.hours)+'</p></div>'+
+    '<div class="spacer"></div><span class="pill"><span style="color:'+st.c+';font-size:10px">'+st.icon+'</span>'+st.label+'</span></div>'+
+    '<div class="wall-body"><div class="xs">'+section(a, a.hasDeep)+'</div>'+
+    '<div class="top"><div class="hero">'+hero+'</div><p class="summary">'+summary(a)+'</p></div>'+
+    '<div class="stats">'+
+      '<div class="stat"><div class="k">Time to dry</div><div class="v">'+etaTxt+etaSub+'</div></div>'+
+      '<div class="stat"><div class="k">Last reading</div><div class="v">'+ago(a.minsAgo)+'</div></div>'+
+      '<div class="stat"><div class="k">Front at 15 mm</div><div class="v">'+(a.fS==null?"not yet":"after "+dur(a.fS))+'</div></div>'+
+      '<div class="stat"><div class="k">Front at mid-depth</div><div class="v">'+(!a.hasDeep?'<small>no probe</small>':a.fD==null?"not yet":"after "+dur(a.fD))+'</div></div>'+
+      '<div class="stat"><div class="k">Probe humidity</div><div class="v">'+f(a.rhS,1)+'<small>%</small>'+(a.hasDeep?' <small>/ '+f(a.rhD,1)+'%</small>':'')+'</div></div>'+
+      '<div class="stat"><div class="k">Mould risk</div><div class="v mini"><i style="background:'+mb.c+'"></i>'+mb.label+'</div>'+
+        '<div class="gauge" title="VTT mould index '+f(a.M,2)+' of 6"><i style="width:'+g+'%;background:'+mb.c+'"></i><u style="left:16.7%"></u><u style="left:50%"></u></div></div>'+
+    '</div></div></article>';
+}
+
+// ---------------------------------------------------------------- charts
+function niceStep(v){ var e = Math.pow(10, Math.floor(Math.log10(v))), q = v/e;
+  return (q<=1?1:q<=2?2:q<=2.5?2.5:q<=5?5:10)*e; }
+var NS = "http://www.w3.org/2000/svg";
+function el(t, a, txt){ var e = document.createElementNS(NS, t);
+  for(var k in a) e.setAttribute(k, a[k]); if(txt!=null) e.textContent = txt; return e; }
+
+// series: [{name, color, points:[{x,y}], dash, noLabel, fmt}]
+function chart(plotId, svgId, tipId, series, o){
+  var plot = $(plotId), svg = $(svgId), tip = $(tipId);
+  var W = Math.max(300, plot.clientWidth || 720), Hh = W < 520 ? 230 : 280;
+  svg.setAttribute("viewBox", "0 0 "+W+" "+Hh); svg.setAttribute("height", Hh);
+  while(svg.firstChild) svg.removeChild(svg.firstChild);
+  var ml = 44, mr = W < 520 ? 60 : 92, mt = 16, mb = 30;
+  var pts = []; series.forEach(function(s){ pts = pts.concat(s.points); });
+  if(!pts.length){
+    svg.appendChild(el("text", { x:W/2, y:Hh/2, "text-anchor":"middle", "font-size":13, fill:"var(--muted)" }, o.empty || "Waiting for readings"));
+    svg.onmousemove = svg.onmouseleave = svg.ontouchstart = svg.ontouchmove = null; return;
+  }
+  var xMax = Math.max(1, Math.max.apply(null, pts.map(function(p){ return p.x; })));
+  var y0 = o.y ? o.y[0] : Math.min.apply(null, pts.map(function(p){ return p.y; }));
+  var y1 = o.y ? o.y[1] : Math.max.apply(null, pts.map(function(p){ return p.y; }));
+  if(!o.y){ var pad = (y1-y0)*0.1 || 1; y0 -= pad; y1 += pad; }
+  var X = function(v){ return ml + v/xMax*(W-ml-mr); };
+  var Y = function(v){ return Hh-mb - (v-y0)/(y1-y0)*(Hh-mt-mb); };
+
+  var g = el("g", {});
+  var ys = niceStep((y1-y0)/4);
+  for(var yv = Math.ceil(y0/ys)*ys; yv <= y1+1e-9; yv += ys){
+    g.appendChild(el("line", { x1:ml, x2:W-mr, y1:Y(yv), y2:Y(yv), stroke:"var(--grid)", "stroke-width":1 }));
+    g.appendChild(el("text", { x:ml-8, y:Y(yv)+4, "text-anchor":"end", "font-size":11, fill:"var(--muted)" }, Math.round(yv*10)/10 + (o.unit||"")));
+  }
+  var useDays = xMax > 96, span = useDays ? xMax/24 : xMax;
+  var xs = niceStep(span / (W < 520 ? 4 : 7));
+  for(var xv = 0; xv <= span+1e-9; xv += xs){
+    var px = X(useDays ? xv*24 : xv);
+    g.appendChild(el("text", { x:px, y:Hh-10, "text-anchor":"middle", "font-size":11, fill:"var(--muted)" }, Math.round(xv*10)/10 + (useDays?"d":"h")));
+  }
+  g.appendChild(el("line", { x1:ml, x2:W-mr, y1:Hh-mb, y2:Hh-mb, stroke:"var(--axis)", "stroke-width":1 }));
+  svg.appendChild(g);
+
+  (o.refs||[]).forEach(function(r){
+    if(r.y < y0 || r.y > y1) return;
+    svg.appendChild(el("line", { x1:ml, x2:W-mr, y1:Y(r.y), y2:Y(r.y), stroke:"var(--muted)", "stroke-width":1, "stroke-dasharray":"3 4" }));
+    svg.appendChild(el("text", { x:ml+6, y:Y(r.y)-5, "font-size":11, fill:"var(--muted)" }, r.label));
+  });
+  (o.marks||[]).forEach(function(m){
+    if(m.x==null) return;
+    svg.appendChild(el("line", { x1:X(m.x), x2:X(m.x), y1:mt, y2:Hh-mb, stroke:m.color, "stroke-width":1.5, "stroke-dasharray":"4 4", opacity:.9 }));
+    svg.appendChild(el("text", { x:X(m.x)+6, y:Hh-mb-8, "font-size":11, "font-weight":600, fill:"var(--ink-2)" }, m.label));
+  });
+
+  var ends = [];
+  series.forEach(function(s){
+    if(!s.points.length) return;
+    var d = s.points.map(function(p,i){ return (i?"L":"M")+X(p.x).toFixed(1)+" "+Y(p.y).toFixed(1); }).join(" ");
+    var a = { d:d, fill:"none", stroke:s.color, "stroke-width":2, "stroke-linejoin":"round", "stroke-linecap":"round" };
+    if(s.dash){ a["stroke-dasharray"] = "5 5"; a.opacity = .8; }
+    svg.appendChild(el("path", a));
+    if(!s.noLabel){ var lp = s.points[s.points.length-1]; ends.push({ x:X(lp.x), y:Y(lp.y), s:s }); }
+  });
+  ends.sort(function(p,q){ return p.y-q.y; });
+  for(var i=1;i<ends.length;i++) if(ends[i].y - ends[i-1].y < 14) ends[i].y = ends[i-1].y + 14;
+  ends.forEach(function(e){
+    svg.appendChild(el("circle", { cx:e.x, cy:e.y, r:3.5, fill:e.s.color }));
+    svg.appendChild(el("text", { x:Math.min(e.x+8, W-mr+8), y:e.y+4, "font-size":11.5, "font-weight":600, fill:"var(--ink)" }, e.s.short || e.s.name));
+  });
+
+  var cross = el("line", { x1:0, x2:0, y1:mt, y2:Hh-mb, stroke:"var(--axis)", "stroke-width":1, opacity:0 });
+  svg.appendChild(cross);
+  var dots = series.map(function(s){ var c = el("circle", { r:5, fill:s.color, stroke:"var(--surface)", "stroke-width":2, opacity:0 }); svg.appendChild(c); return c; });
+  function move(ev){
+    var b = svg.getBoundingClientRect(), p = ev.touches ? ev.touches[0] : ev;
+    var px = (p.clientX - b.left)/b.width*W;
+    if(px < ml || px > W-mr){ hide(); return; }
+    var hv = (px-ml)/(W-ml-mr)*xMax;
+    cross.setAttribute("x1", px); cross.setAttribute("x2", px); cross.setAttribute("opacity", 1);
+    var html = '<b>'+dur(hv)+' in</b>';
+    series.forEach(function(s,i){
+      if(!s.points.length){ dots[i].setAttribute("opacity",0); return; }
+      var best = null, bd = 1e9;
+      s.points.forEach(function(q){ var dd = Math.abs(q.x-hv); if(dd < bd){ bd = dd; best = q; } });
+      if(bd > xMax*0.04 + 0.6){ dots[i].setAttribute("opacity",0); return; }
+      dots[i].setAttribute("cx", X(best.x)); dots[i].setAttribute("cy", Y(best.y)); dots[i].setAttribute("opacity",1);
+      html += '<div class="r"><i style="background:'+s.color+'"></i>'+s.name+': <b>'+(s.fmt ? s.fmt(best.y) : f(best.y,1))+'</b></div>';
+    });
+    tip.innerHTML = html; tip.style.opacity = 1;
+    var left = px/W*b.width + 14;
+    if(left > b.width - 190) left = px/W*b.width - 190;
+    tip.style.left = Math.max(0,left) + "px"; tip.style.top = "8px";
+  }
+  function hide(){ cross.setAttribute("opacity",0); tip.style.opacity = 0; dots.forEach(function(d){ d.setAttribute("opacity",0); }); }
+  svg.onmousemove = move; svg.onmouseleave = hide;
+  svg.ontouchstart = move; svg.ontouchmove = move; svg.ontouchend = hide;
+}
+
+function legend(id, items){
+  $(id).innerHTML = items.map(function(it){
+    return '<span><i'+(it.dash?' class="dash" style="background:repeating-linear-gradient(90deg,'+it.color+' 0 4px,transparent 4px 7px)"':' style="background:'+it.color+'"')+'></i>'+it.name+'</span>';
+  }).join("");
+}
+
+// ---------------------------------------------------------------- render
+function render(sheets, cfg, now){
+  CACHE = { sheets:sheets, cfg:cfg, now:now };
+  var A = analyse(sheets, "A", num(cfg.adry), num(cfg.aext), 0, now);
+  var B = analyse(sheets, "B", num(cfg.bdry), num(cfg.bext), num(cfg.salt) || 0, now);
+  LAST = { A:A, B:B };
+  $("walls").innerHTML = wallCard(A, "Wall A", "Tap-water flood") + wallCard(B, "Wall B", "Salt-water flood");
+
+  // drying curve: water remaining % when calibrated, else Wall A mass alone
+  var pct = function(v){ return f(Math.max(0,v),0)+"%"; };
+  var hasMR = (A.mr && A.mr.length) || (B.mr && B.mr.length);
+  var ds = [];
+  if(hasMR){
+    if(A.mr && A.mr.length){
+      ds.push({ name:"Wall A · tap", short:"A", color:"var(--s1)", points:A.mr.map(function(p){ return { x:p.x, y:p.y*100 }; }), fmt:pct });
+      if(A.proj.length) ds.push({ name:"Wall A · projected", color:"var(--s1)", dash:true, noLabel:true, points:A.proj.map(function(p){ return { x:p.x, y:p.y*100 }; }), fmt:pct });
+    }
+    if(B.mr && B.mr.length){
+      ds.push({ name:"Wall B · salt", short:"B", color:"var(--s3)", points:B.mr.map(function(p){ return { x:p.x, y:p.y*100 }; }), fmt:pct });
+      if(B.proj.length) ds.push({ name:"Wall B · projected", color:"var(--s3)", dash:true, noLabel:true, points:B.proj.map(function(p){ return { x:p.x, y:p.y*100 }; }), fmt:pct });
+    }
+    $("dryTitle").textContent = "Water remaining in the wall";
+    $("drySub").textContent = "Measured by weighing, with the projected path to dry";
+    chart("dryPlot", "drySvg", "dryTip", ds, { y:[0,105], unit:"%", refs:[{ y:DRY_TARGET*100, label:"5% · dry" }] });
+  }else{
+    ds.push({ name:"Wall A · mass", short:"A", color:"var(--s1)", points:A.mass_series || [], fmt:function(v){ return f(v,0)+" g"; } });
+    $("dryTitle").textContent = "Wall A section mass";
+    $("drySub").textContent = "Add the dry mass in Settings to see water remaining";
+    chart("dryPlot", "drySvg", "dryTip", ds, { unit:"", empty:"Waiting for the first weighing" });
+  }
+  legend("dryLegend", ds.map(function(s){ return { name:s.name, color:s.color, dash:s.dash }; }));
+
+  var rh = [
+    { name:"Wall A · 15 mm", short:"A 15 mm", color:"var(--s1)", points:A.sS || [] },
+    { name:"Wall A · mid-depth", short:"A mid", color:"var(--s2)", points:A.sD || [] },
+    { name:"Wall B · 15 mm (salt)", short:"B 15 mm", color:"var(--s3)", points:B.sS || [] }
+  ];
+  var fmtRH = function(v){ return f(v,1)+"%"; };
+  rh.forEach(function(s){ s.fmt = fmtRH; });
+  chart("rhPlot", "rhSvg", "rhTip", rh, {
+    y:[40,102], unit:"%",
+    refs:[{ y:75.3, label:"saturated salt ≈ 75%" }],
+    marks:[{ x:A.fS, label:"front at 15 mm", color:"var(--s1)" }, { x:A.fD, label:"front at mid", color:"var(--s2)" }]
+  });
+  legend("rhLegend", rh);
+
+  var t = '<table><tr><th>Wall</th><th>State</th><th>Running</th><th>RH 15 mm</th><th>RH mid</th><th>Temp</th>'+
+          '<th>Mass</th><th>Water left</th><th>Front 15 mm</th><th>Front mid</th><th>Time to dry</th><th>Mould index</th></tr>';
+  [A,B].forEach(function(a){
+    if(a.empty){ t += '<tr><td>'+a.id+'</td><td colspan="11" style="text-align:left">no data yet</td></tr>'; return; }
+    t += '<tr><td>'+a.id+'</td><td>'+stateStyle(a.state).label+'</td><td>'+dur(a.hours)+'</td><td>'+f(a.rhS,1)+'%</td><td>'+
+         (a.hasDeep?f(a.rhD,1)+'%':'–')+'</td><td>'+f(a.T,1)+' °C</td><td>'+(a.mass==null?'–':f(a.mass,0)+' g')+'</td><td>'+
+         (a.MR==null?'–':f(Math.max(0,a.MR*100),0)+'%')+'</td><td>'+(a.fS==null?'not yet':dur(a.fS))+'</td><td>'+
+         (!a.hasDeep?'–':a.fD==null?'not yet':dur(a.fD))+'</td><td>'+(a.eta==null?'–':a.eta===0?'dry':dur(a.eta))+'</td><td>'+f(a.M,2)+'</td></tr>';
+  });
+  $("tableBox").innerHTML = t + '</table>';
+
+  var anyLive = [A,B].some(function(a){ return !a.empty && a.state==="logging"; });
+  var p = $("livePill");
+  if(MODE==="demo"){ p.innerHTML = '<i style="background:var(--muted)"></i><span>Demo</span>'; }
+  else if(anyLive){ p.innerHTML = '<i style="background:var(--good)"></i><span>Live</span>'; }
+  else { p.innerHTML = '<i style="background:var(--warn)"></i><span>No recent data</span>'; }
+}
+
+// ------------------------------------------------------------- demo data
+function demoSheets(now){
+  var hrs = 72, t0 = now - hrs*3600000, A = [], B = [], MB = [];
+  var seed = 7; function rnd(){ seed = (seed*16807) % 2147483647; return seed/2147483647 - 0.5; }
+  function rhCurve(h, tf, base, floor, tau){ return h < tf ? base : floor + (base-floor)*Math.exp(-(h-tf)/tau); }
+  for(var k=0;k<=hrs*6;k++){
+    var h = k/6, t = t0 + h*3600000;
+    var T = 20.4 + 0.6*Math.sin(2*Math.PI*(h-6)/24) + rnd()*0.06;
+    var mrA = Math.exp(-0.0285*h);
+    A.push({ time:t, rh_shallow: rhCurve(h, 10.6, 99.4, 55, 7) + rnd()*0.35, t_shallow:T,
+             rh_deep: rhCurve(h, 49.2, 99.6, 62, 9) + rnd()*0.35, mass_g: 2350 + 18 + 262*mrA + rnd()*0.8 });
+    B.push({ time:t, rh_shallow: rhCurve(h, 12.4, 98.1, 75.6, 10) + rnd()*0.35, t_shallow:T + 0.1, rh_deep:"", mass_g:"" });
+  }
+  var sol0 = 255/(1-0.0338), salt = sol0*0.0338;
+  for(var d=0; d*12 <= hrs; d++){
+    var hh = d*12;
+    MB.push({ time: t0 + hh*3600000 + 20*60000, mass_g: Math.round(2340 + 18 + salt + 255*Math.exp(-0.0245*hh) + rnd()*1.2) });
+  }
+  return { Rig_A:A, Rig_B:B, Manual_B:MB };
+}
+var DEMO_CFG = { adry:"2350", aext:"18", bdry:"2340", bext:"18", salt:"0.0338" };
+
+function showDemo(why){
+  MODE = "demo";
+  $("demoBanner").classList.remove("hide");
+  $("demoWhy").textContent = why || "A simulated three-day dry-down.";
+  var now = Date.now();
+  render(demoSheets(now), DEMO_CFG, now);
+  $("updated").textContent = "";
+}
+
+// ---------------------------------------------------------------- fetch
+function hasRows(s){ return s && ((s.Rig_A && s.Rig_A.length) || (s.Rig_B && s.Rig_B.length)); }
+function refresh(){
+  if(location.hash === "#demo"){ showDemo(); return; }
+  $("errBox").textContent = "";
+  $("updated").textContent = "refreshing…";
+  var u = C.url + (C.url.indexOf("?") < 0 ? "?" : "&") + "get=all&_=" + Date.now();
+  var done = false;
+  var timer = setTimeout(function(){ if(!done){ done = true; showDemo("The data source did not answer, so this shows a simulated run."); } }, 12000);
+  fetch(u).then(function(r){ return r.json(); }).then(function(j){
+    if(done) return; done = true; clearTimeout(timer);
+    if(!j || !j.sheets) throw new Error("unexpected reply");
+    if(!hasRows(j.sheets)){ showDemo("No rig has logged yet, so this shows a simulated run."); return; }
+    MODE = "live";
+    $("demoBanner").classList.add("hide");
+    render(j.sheets, C, Date.now());
+    $("updated").textContent = "updated " + new Date().toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" });
+  }).catch(function(e){
+    if(done) return; done = true; clearTimeout(timer);
+    showDemo("The data source could not be reached from here, so this shows a simulated run.");
+  });
+}
+
+// ------------------------------------------------------------------ wire
+$("cfgBtn").onclick = function(){ $("cfgCard").classList.toggle("hide"); };
+$("saveBtn").onclick = saveCfg;
+$("demoBtn").onclick = function(){ $("cfgCard").classList.add("hide"); showDemo(); };
+$("refreshBtn").onclick = refresh;
+$("tableBtn").onclick = function(){
+  var hidden = $("tableCard").classList.toggle("hide");
+  $("tableBtn").textContent = hidden ? "Show readings table" : "Hide readings table";
+};
+var rz; window.addEventListener("resize", function(){ clearTimeout(rz); rz = setTimeout(function(){
+  if(CACHE) render(CACHE.sheets, CACHE.cfg, CACHE.now); }, 150); });
+window.addEventListener("hashchange", refresh);
+
+loadCfg();
+refresh();
+setInterval(function(){ if(MODE!=="demo" || location.hash!=="#demo") refresh(); }, 300000);
+</script>
+</body>
+</html>
