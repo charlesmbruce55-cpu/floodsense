@@ -233,7 +233,7 @@ th:first-child,td:first-child{text-align:left}
   </div>
 
   <div class="foot" id="foot">
-    <b>How the numbers are made.</b> Water remaining comes from the load cell: mass minus the specimen's dry mass and the fixings, as a fraction of the water present at the start. Mass is smoothed with a rolling median over ±35 min; handling windows are removed and the curve re-levelled across them, assuming the drying rate before the disturbance carries on. The projection fits an exponential (falling-rate) curve to the last 18 h. A drying front is logged when a probe falls 3 points below its own peak and stays there for at least 2 h. The mould index uses the VTT model's most sensitive (pine sapwood) class; gaps over 90 min are held, not interpolated. Above the fibre saturation point (≈28–30% moisture content) wood holds free water and the cavity reads close to 100% RH; below it, cavity RH tracks moisture content through the sorption isotherm.
+    <b>How the numbers are made.</b> Water remaining comes from the load cell: mass minus the specimen's dry mass and the fixings, as a fraction of the water present at the start. Mass is smoothed with a rolling median over ±35 min; handling windows are removed and the curve re-levelled across them, assuming the drying rate before the disturbance carries on. The projection fits an exponential (falling-rate) curve to the last 36 h. A drying front is logged when a probe falls 3 points below its own peak and stays there for at least 2 h. The mould index uses the VTT model's most sensitive (pine sapwood) class; gaps over 90 min are held, not interpolated. Above the fibre saturation point (≈28–30% moisture content) wood holds free water and the cavity reads close to 100% RH; below it, cavity RH tracks moisture content through the sorption isotherm.
   </div>
 </div>
 
@@ -250,7 +250,7 @@ const EVENTS = [
     short:"Shallow probe offline", text:"Original shallow probe failed short (moisture on uncoated pads) and pulled the shared I²C bus down. Replaced with a varnished spare." },
   { from:"2026-11-26T13:14:00", to:"2026-11-26T14:25:00", kind:"disturb", relevel:true, color:"#f43f5e",
     short:"Handling", text:"Rig handled for fault-finding and the probe swap. Mass inside this window is ignored and the curve re-levelled across it." },
-  { from:"2026-11-26T14:13:00", to:"2026-11-26T16:13:00", kind:"settle", hide:true, series:["S"], color:"#f59e0b",
+  { from:"2026-11-26T14:05:00", to:"2026-11-26T16:13:00", kind:"settle", hide:true, series:["S"], color:"#f59e0b",
     short:"New probe settling", text:"Replacement shallow probe equilibrating to the cavity. Its readings in this window are excluded." }
 ];
 
@@ -375,7 +375,7 @@ function analyse(rows, cfg, evs, now){
   // mass: remove handling windows and re-level across them
   let m = rows.filter(r => r.mass != null).map(r => ({ x:r.t, y:r.mass }));
   evs.filter(e => e.relevel).sort((p,q) => p.a - q.a).forEach(e => {
-    const pre  = m.filter(p => p.x < e.a && p.x >= e.a - 6*HOUR);
+    const pre  = m.filter(p => p.x < e.a && p.x >= e.a - 12*HOUR);
     const post = m.filter(p => p.x > e.b && p.x <= e.b + HOUR);
     const keep = m.filter(p => p.x < e.a || p.x > e.b);
     if(pre.length >= 6 && post.length >= 2){
@@ -405,14 +405,14 @@ function analyse(rows, cfg, evs, now){
 
   // rate over last 12 h
   if(lastM){
-    const w = ms.filter(p => p.x >= lastM.x - 12*HOUR);
+    const w = ms.filter(p => p.x >= lastM.x - 24*HOUR);
     if(w.length >= 6 && w[w.length-1].x - w[0].x >= 4*HOUR) A.rate = -linfit(w).b*HOUR;
   }
   // projection: log-linear on the last 18 h
   A.proj = []; A.eta = null;
   if(A.mr.length >= 6 && A.MR != null){
     const xe = A.mr[A.mr.length-1].x;
-    const f = A.mr.filter(p => p.x >= xe - 18*HOUR && p.y > DRY_TARGET && p.y < 0.98).map(p => ({ x:p.x, y:Math.log(p.y) }));
+    const f = A.mr.filter(p => p.x >= xe - 36*HOUR && p.y > DRY_TARGET && p.y < 0.98).map(p => ({ x:p.x, y:Math.log(p.y) }));
     if(f.length >= 6 && f[f.length-1].x - f[0].x >= 4*HOUR){
       const k = -linfit(f).b*HOUR;
       if(k > 1e-4){
@@ -435,6 +435,7 @@ function analyse(rows, cfg, evs, now){
   const lastOf = (s) => s.length ? s[s.length-1] : null;
   A.lS = lastOf(A.S); A.lD = lastOf(A.D);
   A.sOnline = last.rhS != null && !hidden(last.t, "S"); A.dOnline = last.rhD != null;
+  A.sSettling = last.rhS != null && hidden(last.t, "S");
   A.Tnow = last.tD != null ? last.tD : last.tS;
   A.rows = rows;
   return A;
@@ -634,7 +635,7 @@ function section(A, cfg){
     <circle cx="${x}" cy="${yy}" r="7" fill="${col}" stroke="#fff" stroke-width="2.5"/>
     <path d="M${x + 9} ${yy} H ${bx + B + 14}" stroke="${col}" stroke-width="1.3" stroke-dasharray="2 3"/>
     <text x="${bx + B + 18}" y="${yy - 4}" font-size="13" font-weight="700" fill="#0b1324">${f(d,0)} mm</text>
-    <text x="${bx + B + 18}" y="${yy + 13}" font-size="12.5" fill="${col}" font-weight="700">${rh == null ? "offline" : f(rh,1) + "% RH"}</text>`;
+    <text x="${bx + B + 18}" y="${yy + 13}" font-size="12.5" fill="${col}" font-weight="700">${rh == null ? (i === 0 && A.sSettling ? "settling in" : "offline") : f(rh,1) + "% RH"}</text>`;
   });
   s += `<text x="${bx + B/2}" y="${by + B + 20}" text-anchor="middle" font-size="11.5" fill="#64748b">${f(size,0)} mm block · dries from all six faces</text>
   <g transform="translate(${bx + B + 18},${by + B - 34})" font-size="11" fill="#475569">
@@ -644,8 +645,8 @@ function section(A, cfg){
   </g></svg>`;
   return s;
 }
-function probeRow(name, depth, col, rh, T, online){
-  const st = rhState(online ? rh : null, T);
+function probeRow(name, depth, col, rh, T, online, settling){
+  const st = settling ? { k:"na", label:"New probe settling in" } : rhState(online ? rh : null, T);
   return `<div class="probe"><div class="sw" style="background:${col}"></div>
     <div><div class="n">${name} · ${f(depth,0)} mm</div><div class="d">${online && T != null ? f(T,1) + " °C&nbsp; " : ""}<span class="chip c-${st.k}"><i></i>${st.label}</span></div></div>
     <div class="val" style="color:${col}">${online && rh != null ? f(rh,1) + "<small style='font-size:13px'>%</small>" : "–"}</div></div>`;
@@ -678,7 +679,7 @@ function render(sheets, cfg, now, demo){
   $("kMC").innerHTML = A.added == null ? "–" : f(A.added, 1) + "<small>%</small>";
   $("kMCs").textContent = A.water == null ? "Set dry mass in Settings" : f(A.water, 0) + " g water above the dry mass";
   $("kRate").innerHTML = A.rate == null ? "–" : f(A.rate, 2) + "<small>g/h</small>";
-  $("kRates").textContent = A.rate == null ? "Needs 4 h of data" : "Mean over the last 12 h";
+  $("kRates").textContent = A.rate == null ? "Needs 4 h of data" : "Mean over the last 24 h";
   if(A.eta == null){ $("kEta").textContent = "–"; $("kEtas").textContent = "Projection needs a steady trend"; }
   else if(A.eta === 0){ $("kEta").textContent = "Dry"; $("kEtas").textContent = "Below 5% flood water"; }
   else{
@@ -691,7 +692,7 @@ function render(sheets, cfg, now, demo){
   $("kMoulds").textContent = mc.label + " · worst depth";
 
   const stS = rhState(A.sOnline && A.lS ? A.lS.y : null, A.Tnow), stD = rhState(A.lD ? A.lD.y : null, A.Tnow);
-  const descr = (st, d, rh) => st.k === "na" ? `the ${d} mm probe is offline` :
+  const descr = (st, d, rh) => st.k === "na" ? (d === f(dS,0) && A.sSettling ? `the new ${d} mm probe is settling in` : `the ${d} mm probe is offline`) :
     st.k === "sat" ? `${d} mm is still saturated (${f(rh,1)}%)` :
     st.k === "damp" ? `${d} mm is damp at ${f(rh,1)}%, inside the mould-risk zone` : `${d} mm has dried to ${f(rh,1)}%, below the mould threshold`;
   let story = descr(stS, f(dS,0), A.lS && A.lS.y);
@@ -702,7 +703,7 @@ function render(sheets, cfg, now, demo){
   // cross-section + probe rows
   $("section").innerHTML = section(A, cfg);
   $("probeRows").innerHTML =
-    probeRow("Shallow", dS, "#d97706", A.lS && A.lS.y, A.lS && A.lS.T, A.sOnline && !!A.lS) +
+    probeRow("Shallow", dS, "#d97706", A.lS && A.lS.y, A.lS && A.lS.T, A.sOnline && !!A.lS, A.sSettling) +
     probeRow("Deep", dD, "#4f46e5", A.lD && A.lD.y, A.lD && A.lD.T, !!A.lD);
 
   const xBands = evs.map(e => ({ a:e.a, b:e.b, color:e.color, short:e.short }));
